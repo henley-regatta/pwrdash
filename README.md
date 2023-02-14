@@ -64,3 +64,8 @@ I found I needed to build a couple of test programs to verify functionality as I
   - `demosvr.py` is a simplified version of the full server. This builds a simple screen image in memory then provides the PNG (for a browser) or RAW (zLib compressed bytestream) for a Pico client. Although everything's hardcoded in this (instead of using the JSON) you might find it useful as a "testcard" server if you're more interested in the client side
   - `influxtest.py` is just a test suite I used to build and verify my InfluxQL queries before adding them to the main server script.
   - `rebuild_container.sh` is a script to try and automate container build. The word "...Eh...." springs to mind.
+
+## Docker/Container Build
+I've included an example `Dockerfile` (and associated `.dockerignore`) to allow containerisation of a build; this is very much in _"Works On My Machine"_ territory though. One problem is that things you'd like to be external - in particular the config files - get "baked in" to the build, which isn't ideal. Impressively broken is the fact that I'm specifying the server port in *three* places - the config file, the Dockerfile, and as part of the container build process in order to get it to work...
+
+I also include `rebuild_container.sh` as an example of how to rebuild the container assuming a current repository clone in the current directory. Note that you'll _also_ have to create the appropriate JSON config files (at the very least `dashsvrcfg.json`) and source the font files *before* running this script (or else the built container just won't work). 
