@@ -4,10 +4,10 @@ import datetime
 import json 
 
 
-cfg=json.load(open('influxcfg.json','r'))
+cfg=json.load(open('dashsvrcfg.json','r'))
 
 
-querybase = f"http://{cfg['SERVER']}:{cfg['SVRPORT']}/query?db={cfg['DATABASE']}&u={cfg['USER']}&p={cfg['PASSWORD']}&q="
+querybase = f"http://{cfg['INFLUXSVR']}:{cfg['INFLUXPORT']}/query?db={cfg['INFLUXDB']}&u={cfg['INFLUXUSER']}&p={cfg['INFLUXPASS']}&q="
 
 #########################################
 def gen_today() :
@@ -30,18 +30,14 @@ print(get_results(r.json()))
 r = requests.get(querybase + "SELECT mean(solarPower), mean(housePower), mean(gridPower), mean(batteryPower) FROM instantpower WHERE time >= now() -1d GROUP BY time(30m)")
 print(get_results(r.json()))
 
-
-STDCHARGE=0.2095
-IMPORTRATE=0.117
-EXPORTRATE=0.117
 impClause = f"((last(gridImport)-first(gridImport))/1000)"
 expClause = f"((last(gridExport)-first(gridExport))/1000)"
-query=f"SELECT {impClause} AS \"IMPORT\", {expClause} AS \"EXPORT\" FROM energyusage WHERE time >= '{gen_today()}' TZ('Europe/London')"
+query=f"SELECT {impClause} AS \"IMPORT\", {expClause} AS \"EXPORT\" FROM energyusage WHERE time >= '{gen_today()}' TZ('{cfg['TIMEZONE']}')"
 r = requests.get(querybase + query)
 res=get_results(r.json())
 importkWh = res[0][1]
 exportkWh = res[0][2]
 print(importkWh)
-impCost = importkWh * IMPORTRATE 
-expGen  = exportkWh * EXPORTRATE
-print(f"Cost today: £{(impCost - expGen) + STDCHARGE:.2f}")
+impCost = importkWh * cfg['IMPUNITCOST']
+expGen  = exportkWh * cfg['EXPUNITCOST']
+print(f"Cost today: £{(impCost - expGen) + cfg['STANDINGCHRG']:.2f}")
