@@ -13,6 +13,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . . 
 
 # Expose the default port (change if that changes)
-EXPORT 7478
+EXPOSE 7478
 
 CMD [ "python", "./dashsvr.py"] 
