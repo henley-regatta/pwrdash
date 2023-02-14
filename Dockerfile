@@ -1,5 +1,8 @@
 # Docker configuration file to setup and run the Dashboard Server Python script
 # Based on the official Docker Python image https://hub.docker.com/_/python/
+# Build with:
+#      docker build . -t username/pwrdashsvr-app
+# (or see rebuild_container.sh)
 
 FROM python:3
 WORKDIR /usr/src/app 
