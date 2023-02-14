@@ -5,6 +5,8 @@ This is a Client/Server application to generate a self-refreshing dashboard page
 ## Client Application
 The Client is `dashloader.py` a micropython script running on the Pico. This is attached to a WaveShare 4.2 inch (400x300 4-greyscale) ePaper display. I've done other projects using this combination, see in particular [henley-regatta/pico_calendar_display](https://github.com/henley-regatta/pico_calendar_display). A key feature of this combo is _limited memory_ on the Pico which means building an in-memory screenbuffer is out of the question (too big). So this client program is used to retrieve over HTTP a zLib compressed bytestream of the dashboard image constructed by a server. It just loops through sleeping, waking up, connecting to WiFi, retrieving the URL and then squirting it to the WaveShare library for display.
 
+Note that the client applications depends on a _customised_ version of `WavePaper42.py` being present in the root of the Pico's filesystem (see the `pico_calendar_display` project for more details). Assuming you've initialised micropython on the device, copying that library, the config file `dashloadcfg.json` and a copy of `dashloader.py` onto the Pico then renaming `dashloader.py` as `main.py` will be enough to get the client app running there...
+
 ### Client configuration
 The client is configured with a JSON file put into the root of the Pico's miniscule filesystem. `dashloadcfg.json` is fairly simple:
 
@@ -61,3 +63,4 @@ I found I needed to build a couple of test programs to verify functionality as I
 
   - `demosvr.py` is a simplified version of the full server. This builds a simple screen image in memory then provides the PNG (for a browser) or RAW (zLib compressed bytestream) for a Pico client. Although everything's hardcoded in this (instead of using the JSON) you might find it useful as a "testcard" server if you're more interested in the client side
   - `influxtest.py` is just a test suite I used to build and verify my InfluxQL queries before adding them to the main server script.
+  - `rebuild_container.sh` is a script to try and automate container build. The word "...Eh...." springs to mind.
