@@ -146,6 +146,7 @@ def gen_image(width,height) :
     d= influx_query("SELECT last(soc) FROM batterycharge")
     soc=d[0][1]
 
+    #Header including current time
     tStr = parse_influxts(d[0][0])
     draw.text((int(cfg['IMGWIDTH']/2),2), tStr,fill=cfg['GREYMAP'][0],font=largFont,anchor="mt")
         
@@ -154,12 +155,14 @@ def gen_image(width,height) :
     draw.rectangle(bbox,outline=cfg['GREYMAP'][2],width=1)
     draw.text((bbox[0]+25,bbox[1]+10),f"Batt:",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=smolFont)
     draw.text((bbox[0]+25,bbox[1]+35),f"{soc:.0f}%",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=medFont)
-    pctBox = pctfillbox(int(soc),0,0,20,bbox[3]-bbox[1])
-    img.paste(pctBox, box=(bbox[0]+51,bbox[1]))
+    #The battery state box
+    pctBox = pctfillbox(int(soc),0,0,15,bbox[3]-bbox[1])
+    img.paste(pctBox, box=(bbox[2]-15,bbox[1]))
+    #The state-of-charge-over-last-day chart
     soc=influx_query("SELECT mean(soc) FROM batterycharge WHERE time >= now() - 1d GROUP BY time(30m)")
     socs = just_the_data(soc,1)
-    battChrgGraph = filledChart(socs,0,100,(bbox[2]-bbox[0])-70,bbox[3]-bbox[1],cfg['GREYMAP'][1])
-    img.paste(battChrgGraph, box=(bbox[0]+72,bbox[1]))
+    battChrgGraph = filledChart(socs,0,100,(bbox[2]-bbox[0])-61,bbox[3]-bbox[1],cfg['GREYMAP'][1])
+    img.paste(battChrgGraph, box=(bbox[0]+45,bbox[1]))
  
     #Accountancy Data
     bbox=[0,24,int(cfg['IMGWIDTH']/2),90]
@@ -173,20 +176,21 @@ def gen_image(width,height) :
     netGrid = gridIn-gridOut
     selfSufficiency = (houseIn-netGrid) / houseIn
     cost = (gridIn*cfg['IMPUNITCOST'] - gridOut*cfg['EXPUNITCOST']) + cfg['STANDINGCHRG']
-        
+    pwr=influx_query("SELECT mean(solarPower), mean(housePower), mean(gridPower), mean(batteryPower) FROM instantpower WHERE time >= now() -1d GROUP BY time(10m)")
+    lp=influx_query("SELECT last(batteryPower),last(gridPower),last(housePower),last(solarPower) FROM instantpower")        
+    
     draw.text((int(bbox[2]/4),bbox[1]+10),f"Cost:",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=smolFont)
     draw.text((int(bbox[2]/4),bbox[1]+35),f"£{cost:.2f}",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=medFont)
         
     draw.text((bbox[2]-int(bbox[2]/4),bbox[1]+10),f"Off-Grid",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=smolFont)
     draw.text((bbox[2]-int(bbox[2]/4),bbox[1]+35),f"{selfSufficiency:.0%}",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=medFont)
 
-    pwr=influx_query("SELECT mean(solarPower), mean(housePower), mean(gridPower), mean(batteryPower) FROM instantpower WHERE time >= now() -1d GROUP BY time(10m)")
-    #The space we've got left is now...
-    dBot = 90
-    brRem = [cfg['IMGWIDTH'],cfg['IMGHEIGHT']]
+    #The "main" left-lower portion is our 4 charts of power gen/consumption:
+    dBot = 90 # the area lies BELOW this line (y>=dBot)
     gRight=cfg['IMGWIDTH'] - 80
     hStep = (cfg['IMGHEIGHT']-dBot) / 4
     bbox=[0,dBot,gRight,dBot+hStep]
+    #This is the centre point for the text summaries of production/consumption on the RIGHT
     midtBox = gRight+int((cfg['IMGWIDTH']-gRight)/2)
         
     hp=just_the_data(pwr,2)
@@ -194,9 +198,7 @@ def gen_image(width,height) :
     img.paste(hpChart,box=(bbox[0],int(bbox[1])))
     draw.text((bbox[0]+int(bbox[2]/2),bbox[1]),"House",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=smolFont)
     draw.text((bbox[2],bbox[1]),"10kW",fill=cfg['GREYMAP'][1],anchor="ra",align="right",font=tinyFont)
-    draw.text((midtBox,bbox[1]+15),"House kWh",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=smolFont)
-    draw.text((midtBox,bbox[1]+35),f"{houseIn:.1f}",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=medFont )
-    
+
     bbox[1] += hStep
     bbox[3] += hStep
     gp=just_the_data(pwr,3)
@@ -205,17 +207,14 @@ def gen_image(width,height) :
     draw.text((bbox[0]+int(bbox[2]/2),bbox[1]),"Grid",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=smolFont)
     draw.text((bbox[2],bbox[1]),"10kW",fill=cfg['GREYMAP'][1],anchor="ra",align="right",font=tinyFont)
     draw.text((bbox[2],bbox[3]),"-1.5kW",fill=cfg['GREYMAP'][1],anchor="rd",align="right",font=tinyFont)
-    draw.text((midtBox,bbox[1]),"Grid kWh",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=smolFont)
-    draw.text((midtBox,bbox[1]+20),f"{netGrid:.1f}",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=medFont )
+    
     bbox[1] += hStep
     bbox[3] += hStep
     sp=just_the_data(pwr,1)
-    spChart=lineChart(sp,0,3200,gRight,int(hStep),cfg['GREYMAP'][0])
+    spChart=filledChart(sp,0,3200,gRight,int(hStep),cfg['GREYMAP'][1])
     img.paste(spChart, box=(bbox[0],int(bbox[1])))
     draw.text((bbox[0]+int(bbox[2]/2),bbox[1]),"Solar",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=smolFont)
     draw.text((bbox[2],bbox[1]),"3.2kW",fill=cfg['GREYMAP'][1],anchor="ra",align="right",font=tinyFont)
-    draw.text((midtBox,bbox[1]-15),"Solar kWh",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=smolFont)
-    draw.text((midtBox,bbox[1]+5),f"{solarOut:.1f}",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=medFont )
     bbox[1] += hStep
     bbox[3] += hStep
     bp=just_the_data(pwr,4)
@@ -225,21 +224,34 @@ def gen_image(width,height) :
     draw.text((bbox[2],bbox[1]),"5kW",fill=cfg['GREYMAP'][1],anchor="ra",align="right",font=tinyFont)
     draw.text((bbox[2],bbox[3]),"-2kW",fill=cfg['GREYMAP'][1],anchor="rd",align="right",font=tinyFont)
     
-    #And in the bottom-right goes the latest power data:
-    bbox=[gRight,int(bbox[1]-40),cfg['IMGWIDTH'],cfg['IMGHEIGHT']]
-    #we need this area in 4:
-    cX=int(bbox[2]-bbox[0])-1
-    cY=int((bbox[3]-bbox[1])/4)-1
-    draw.rectangle(bbox,outline=cfg['GREYMAP'][2],width=1)
-    lp=influx_query("SELECT last(batteryPower),last(gridPower),last(housePower),last(solarPower) FROM instantpower")
+    #Down the right hand side go the summaries of consumption plus the bar-charts of current 
+    #production/usage.
+    sBox = dBot+5 # our starting point is at the top of the area
+    draw.text((midtBox,sBox),"House kWh",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=smolFont)
+    draw.text((midtBox,sBox+20),f"{houseIn:.1f}",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=medFont )
+    #we need to work out how much space is available per bar-chart. We can do this by subtracting 
+    #the size of the text we need (25 * 2 * 3 = 120) from the remaining space
+    remChartSpace = cfg['IMGHEIGHT'] - sBox - (25 * 2 * 3)
+    #Making each chart size...
+    cX = cfg['IMGWIDTH'] - gRight
+    cY = int(remChartSpace/4) - 5
     hBar=miniBar(lp[0][3]/1000,"House kW",0,10,cX,cY)
-    img.paste(hBar,box=(bbox[0],bbox[1]))
+    img.paste(hBar,box=(gRight,sBox+45))
+    
+    #And repeat for Grid and Solar:
+    sOffset = sBox+45+cY+10
+    draw.text((midtBox,sOffset),"Grid kWh",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=smolFont)
+    draw.text((midtBox,sOffset+20),f"{netGrid:.1f}",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=medFont )
     gBar=miniBar(lp[0][2]/1000,"Grid kW",-1,10,cX,cY)
-    img.paste(gBar,box=(bbox[0],bbox[1]+cY+1))
+    img.paste(gBar,box=(gRight,sOffset+45))
+    sOffset = sOffset+45+cY+10
+    draw.text((midtBox,sOffset),"Solar kWh",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=smolFont)
+    draw.text((midtBox,sOffset+20),f"{solarOut:.1f}",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=medFont )
     sBar=miniBar(lp[0][4]/1000,"Solar kW",0,4,cX,cY)
-    img.paste(sBar,box=(bbox[0],bbox[1]+2*cY+2))
+    img.paste(sBar,box=(gRight,sOffset+45))
+    #Poor old Battery just goes on the bottom....
     bBar=miniBar(lp[0][1]/1000,"Batt kW",-2,5,cX,cY)
-    img.paste(bBar,box=(bbox[0],bbox[1]+3*cY+3))
+    img.paste(bBar,box=(gRight,cfg['IMGHEIGHT']-cY))
 
 
     return img
