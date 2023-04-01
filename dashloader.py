@@ -121,6 +121,7 @@ def get_gscale(gscale_url):
             utime.sleep_ms(500)
             blinkLED(3,250)
             utime.sleep_ms(1000)
+            machine.reset() # or what, just hang forever? Lame!
 
 ########################################
 def display_img(imgdata) :

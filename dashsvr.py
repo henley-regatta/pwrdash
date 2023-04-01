@@ -263,8 +263,14 @@ def gen_today() :
     return t.strftime("%Y-%m-%dT00:00:00Z")
 
 #########################################
+#TODO - seeing errors on this when getting a blank result
+#       (one with no data). Need to handle it.
 def get_results(json) :
-    return json['results'][0]['series'][0]['values']
+    if 'series' in json['results'][0] :
+        return json['results'][0]['series'][0]['values']
+    else :
+        print(f"ERROR - no 'series' in json results: {json['results']}")
+        return []
 
 #########################################
 def just_the_data(results,ndx) :
