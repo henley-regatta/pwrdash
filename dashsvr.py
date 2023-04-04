@@ -175,6 +175,8 @@ def gen_image(width,height) :
     solarOut = a[0][4]
     netGrid = gridIn-gridOut
     selfSufficiency = (houseIn-netGrid) / houseIn
+    if selfSufficiency > 1 :
+        selfSufficiency = 1 #Technically correct to be >100% efficient if we're back-feeding grid, but not a helpful value to display
     cost = (gridIn*cfg['IMPUNITCOST'] - gridOut*cfg['EXPUNITCOST']) + cfg['STANDINGCHRG']
     pwr=influx_query("SELECT mean(solarPower), mean(housePower), mean(gridPower), mean(batteryPower) FROM instantpower WHERE time >= now() -1d GROUP BY time(10m)")
     lp=influx_query("SELECT last(batteryPower),last(gridPower),last(housePower),last(solarPower) FROM instantpower")        
