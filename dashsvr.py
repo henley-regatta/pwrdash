@@ -12,6 +12,7 @@
 #   pip install influxdb-client
 #########################################################################
 import socket,threading,socketserver,sys,time,zlib
+from datetime import date
 from datetime import datetime
 import pytz
 import json
@@ -167,14 +168,16 @@ def gen_image(width,height) :
     #Accountancy Data
     bbox=[0,24,int(cfg['IMGWIDTH']/2),90]
     draw.rectangle(bbox,outline=cfg['GREYMAP'][2],width=1)
-    aQuery=f"SELECT ((last(gridImport)-first(gridImport))/1000), ((last(gridExport)-first(gridExport))/1000), ((last(houseImport)-first(houseImport))/1000),((last(solarExport)-first(solarExport))/1000) FROM energyusage WHERE time >= '{gen_today()}'"
+    aQuery=f"SELECT ((last(gridImport)-first(gridImport))/1000), ((last(gridExport)-first(gridExport))/1000), ((last(houseImport)-first(houseImport))/1000),((last(solarExport)-first(solarExport))/1000) FROM energyusage WHERE time >= {gen_today()}s"
     a=influx_query(aQuery)
-    gridIn = a[0][1]
-    gridOut = a[0][2]
-    houseIn = a[0][3]
-    solarOut = a[0][4]
-    netGrid = gridIn-gridOut
-    selfSufficiency = (houseIn-netGrid) / houseIn
+    [gridIn,gridOut,houseIn,solarOut, netGrid, selfSufficiency] = [0,0,0,0,0,1]
+    if len(a) > 0 :
+        gridIn = a[0][1] 
+        gridOut = a[0][2]
+        houseIn = a[0][3] 
+        solarOut = a[0][4]
+        netGrid = gridIn-gridOut
+        selfSufficiency = (houseIn-netGrid) / houseIn
     if selfSufficiency > 1 :
         selfSufficiency = 1 #Technically correct to be >100% efficient if we're back-feeding grid, but not a helpful value to display
     cost = (gridIn*cfg['IMPUNITCOST'] - gridOut*cfg['EXPUNITCOST']) + cfg['STANDINGCHRG']
@@ -217,6 +220,7 @@ def gen_image(width,height) :
     img.paste(spChart, box=(bbox[0],int(bbox[1])))
     draw.text((bbox[0]+int(bbox[2]/2),bbox[1]),"Solar",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=smolFont)
     draw.text((bbox[2],bbox[1]),"3.2kW",fill=cfg['GREYMAP'][1],anchor="ra",align="right",font=tinyFont)
+    
     bbox[1] += hStep
     bbox[3] += hStep
     bp=just_the_data(pwr,4)
@@ -261,8 +265,11 @@ def gen_image(width,height) :
 #helper functions for influx queries
 #########################################
 def gen_today() :
-    t = datetime.now()
-    return t.strftime("%Y-%m-%dT00:00:00Z")
+    #This timestamp stuff needs specifying in Epoch
+    today=date.today()
+    return int(datetime.combine(today, datetime.min.time()).timestamp())
+    #t = datetime.now()
+    #return t.strftime("%Y-%m-%dT00:00:00Z")
 
 #########################################
 #TODO - seeing errors on this when getting a blank result
@@ -288,7 +295,6 @@ def parse_influxts(influxts) :
     ts = datetime.strptime(noDecimal[0],"%Y-%m-%dT%H:%M:%S")
     outTS=ts.strftime("%a %d %b %H:%M")
     return outTS
-
 
 #########################################
 def influx_query(query) :
