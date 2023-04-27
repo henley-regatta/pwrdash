@@ -1,7 +1,7 @@
-#!/bin/sh
+#!/bin/bash
 
 source dashenv.sh
-if ["$CONTAINERNAME" == "" ]; then
+if [ -z ${CONTAINERNAME} ]; then
     echo "Check dashenv.sh is valid"
     exit 1
 fi
