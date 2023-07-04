@@ -31,6 +31,7 @@ I _very_ much doubt this server will be of use to _anyone_ else as-is, because i
 
 ### Server configuration
 Like the client, there's a JSON file `dashsvrcfg.json` that sits alongside the server providing the stuff I don't want the wider world to read:
+(note that this version has time-of-day charge bands split into CHEAP, STANDARD and PEAK. You're SOL if there's more than one CHEAP or PEAK though)
 
 ```json
 {"IMGWIDTH"     : 300,
@@ -45,9 +46,17 @@ Like the client, there's a JSON file `dashsvrcfg.json` that sits alongside the s
  "INFLUXDB"     : "powerdata",
  "INFLUXUSER"   : "user",
  "INFLUXPASS"   : "password",
- "IMPUNITCOST"  : 0.45,
- "EXPUNITCOST"  : 0.117,
- "STANDINGCHRG" : 0.46
+ "CHEAPSTART"   : "02:00",
+ "CHEAPEND"     : "05:00",
+ "PEAKSTART"    : "16:00",
+ "PEAKEND"      : "19:00",
+ "STDIMPCOST"   : 0.3000,
+ "PEAKIMPCOST"  : 0.5000,
+ "CHEAPIMPCOST" : 0.2000,
+ "STDEXPCOST"   : 0.2000,
+ "PEAKEXPCOST"  : 0.3000,
+ "CHEAPEXPCOST" : 0.1000,
+ "STANDINGCHRG" : 0.5000
 }
 ```
   
@@ -56,7 +65,8 @@ Like the client, there's a JSON file `dashsvrcfg.json` that sits alongside the s
   - `SVRPORT` is the port the micro-server will listen on. If you're running a firewall, pick a port that'll make it out so your client can get to it. And make the values match on the client config too...
   - `TIMEZONE` turns out to be important mostly for the Influx queries; it's probably best to make this match the TZ of your _Client_ system so that the start-of-day calculations work out correctly...
   - `INFLUXSVR`, `INFLUXPORT`, `INFLUXUSER`, `INFLUXPASS` and `INFLUXDB` all control connectivity from the Server app to the InfluxDB instance. This _probably_ won't work on InfluxDB 2.x I'm afraid...
-  - `IMPUNITCOST`, `EXPUNITCOST` and `STANDINGCHRG` represent the current electricity costs used to work out the costs. Substitute your own values but you'll probably want to do a quick search-and-replace for the "£" symbol in the code if you're not based in the UK...
+  - `CHEAPSTART`/`CHEAPEND` and `PEAKSTART`/`PEAKEND` represent the blocks of time for "Cheap rate" and "Peak rates" with all other times being "Standard"
+  - `STDIMPCOST`/`PEAKIMPCOST`/`CHEAPIMPCOST`, `STDEXPCOST`/`PEAKEXPCOST`/`CHEAPEXPCOST` and `STANDINGCHRG` represent the  electricity costs used to work out the costs. Substitute your own values but you'll probably want to do a quick search-and-replace for the "£" symbol in the code if you're not based in the UK...
 
 ## Test Programs
 I found I needed to build a couple of test programs to verify functionality as I went. I include them because you may find them helpful too

@@ -33,6 +33,8 @@ smolFont = ImageFont.truetype(cfg['NRMLFONT'],14)
 medFont  = ImageFont.truetype(cfg['BOLDFONT'],16)
 largFont = ImageFont.truetype(cfg['NRMLFONT'],20)
 
+
+
 #########################################################################
 def pctfillbox(pct,tlX,tlY,brX,brY) :
     w = brX-tlX 
@@ -107,6 +109,50 @@ def lineChart(series,minH,maxH,maxX,maxY,lColour) :
         lastY=nextY
     return subImg
 
+#########################################################################
+#This draws a "line" but uses categorised data by band to differentiate
+def lineChartWithCategories(series,minH,maxH,maxX,maxY) :
+    subImg = Image.new('L',(maxX,maxY),cfg['GREYMAP'][3])
+    draw   = ImageDraw.Draw(subImg)
+    #now offset the values for internal drawing 
+    maxX -=1
+    maxY -=1
+    draw.rectangle((0,0,maxX,maxY),fill=cfg['GREYMAP'][3],outline=cfg['GREYMAP'][2],width=1)
+    #Further offset for actual value plotting
+    maxX -=1
+    maxY -=1
+    #steps and ranges
+    numVals = len(series)
+    dX = maxX / numVals 
+  
+    #We draw as line segments with the hacks being that
+    #the start point is at the scale height of the first data point
+    #and we'll draw a "background" rectangle for CHEAP/PEAK
+    lastX=1
+    lastY=maxY - (yFract(series[0][0],minH,maxH)*maxY)
+    
+    # SPECIAL - if minH < 0, draw a line across at zero
+    if minH < 0 :
+        zeroH = maxY - (yFract(0,minH,maxH)*maxY)
+        draw.line((lastX,zeroH,maxX,zeroH),fill=cfg['GREYMAP'][2],width=1)
+    
+    for v in series :
+        nextX = lastX+dX 
+        nextY = maxY - (yFract(v[0],minH,maxH)*maxY)
+        #colour determined by timeblock
+        if v[1] == 2 :   # CHEAP
+            lColour = cfg['GREYMAP'][0]
+            draw.rectangle((int(lastX),0,int(nextX),int(maxY)),fill=cfg['GREYMAP'][2])
+        elif v[1] == 1 : # PEAK
+            lColour = cfg['GREYMAP'][3]
+            draw.rectangle((int(lastX),0,int(nextX),int(maxY)),fill=cfg['GREYMAP'][1])
+        else :           # STANDARD
+            lColour = cfg['GREYMAP'][0]
+        draw.line((int(lastX),int(lastY),int(nextX),int(nextY)),fill=lColour,width=1)
+        lastX=nextX
+        lastY=nextY
+    return subImg
+
 #########################################################################    
 def miniBar(data,title,minV,maxV,dimX,dimY) :
     subImg = Image.new('L',(dimX,dimY),cfg['GREYMAP'][3])
@@ -136,6 +182,49 @@ def miniBar(data,title,minV,maxV,dimX,dimY) :
     draw.text((cBound[0]+int((cBound[2]-cBound[0])/2),int(cBound[3]/2)),title,fill=cfg['GREYMAP'][3],align='center',anchor='mm',font=tinyFont)
     
     return subImg
+
+#########################################################################    
+#GIVEN: Grid usage "today", determine usage by time-block (std/peak/cheap)
+def usageByTimeblockToday(gridData) :
+    usage={"imp" : [0,0,0], #STD,PEAK,CHEAP
+           "exp" : [0,0,0]}
+    #these are meter readings, we want to track a delta which means holding
+    #previous values
+    pVals=gridData[0][1:]
+
+    for p in gridData:
+        dImp=p[1]-pVals[0]
+        dExp=p[2]-pVals[1]
+        ts=influxts_to_ts(p[0])
+        #Determine cost bracket
+        if ts>=cheapTime[0] and ts <=cheapTime[1] :  #CHEAP?
+            usage["imp"][2] += dImp 
+            usage["exp"][2] += dExp
+        elif ts>=peakTime[0] and ts<=peakTime[1] : #PEAK?
+            usage["imp"][1] += dImp 
+            usage["exp"][1] += dExp
+        else :                               #STD?
+            usage["imp"][0] += dImp 
+            usage["exp"][0] += dExp
+        #reset the counters
+        pVals=p[1:]
+    return usage
+
+######################################################################### 
+#GIVEN: A set of time-series data, detemine which time-block each value goes into
+def catByTimeblock(data,ndx) :
+    categorised=[]
+    for v in data :
+        #ts always index 0 
+        ts = influxts_to_ts(v[0])
+        if ts>=cheapTime[0] and ts <= cheapTime[1] :
+            categorised.append([v[ndx],2])
+        elif ts>=peakTime[0] and ts <= peakTime[1] :
+            categorised.append([v[ndx],1])
+        else :
+            categorised.append([v[ndx],0])
+    return categorised
+
 
 #########################################################################
 # NOTE: this will look better "Portrait" so everything's rotated 90 degrees
@@ -180,10 +269,16 @@ def gen_image(width,height) :
         selfSufficiency = (houseIn-netGrid) / houseIn
     if selfSufficiency > 1 :
         selfSufficiency = 1 #Technically correct to be >100% efficient if we're back-feeding grid, but not a helpful value to display
-    cost = (gridIn*cfg['IMPUNITCOST'] - gridOut*cfg['EXPUNITCOST']) + cfg['STANDINGCHRG']
+    #MCE 2023-07-04 - COST is about to get a whole heap harder to work out
+    # thanks to smart tariffs. So, here goes....
+    usage=usageByTimeblockToday(influx_query(f"SELECT gridImport/1000, gridExport/1000 from energyusage WHERE time >= {gen_today()}s"))
+    cost = cfg['STANDINGCHRG'] + \
+           (usage["imp"][0] * cfg['STDIMPCOST'] - usage["exp"][0] * cfg['STDEXPCOST']) + \
+           (usage["imp"][1] * cfg['PEAKIMPCOST'] - usage["exp"][1] * cfg['PEAKEXPCOST']) + \
+           (usage["imp"][2] * cfg['CHEAPIMPCOST'] - usage["exp"][2] * cfg['CHEAPEXPCOST'])
+           
     pwr=influx_query("SELECT mean(solarPower), mean(housePower), mean(gridPower), mean(batteryPower) FROM instantpower WHERE time >= now() -1d GROUP BY time(10m)")
-    lp=influx_query("SELECT last(batteryPower),last(gridPower),last(housePower),last(solarPower) FROM instantpower")        
-    
+        
     draw.text((int(bbox[2]/4),bbox[1]+10),f"Cost:",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=smolFont)
     draw.text((int(bbox[2]/4),bbox[1]+35),f"£{cost:.2f}",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=medFont)
         
@@ -197,22 +292,25 @@ def gen_image(width,height) :
     bbox=[0,dBot,gRight,dBot+hStep]
     #This is the centre point for the text summaries of production/consumption on the RIGHT
     midtBox = gRight+int((cfg['IMGWIDTH']-gRight)/2)
-        
-    hp=just_the_data(pwr,2)
-    hpChart=filledChart(hp,0,10000,gRight,int(hStep),cfg['GREYMAP'][0])
-    img.paste(hpChart,box=(bbox[0],int(bbox[1])))
-    draw.text((bbox[0]+int(bbox[2]/2),bbox[1]),"House",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=smolFont)
-    draw.text((bbox[2],bbox[1]),"10kW",fill=cfg['GREYMAP'][1],anchor="ra",align="right",font=tinyFont)
-
-    bbox[1] += hStep
-    bbox[3] += hStep
-    gp=just_the_data(pwr,3)
-    gpChart=lineChart(gp,-1500,10000,gRight,int(hStep),cfg['GREYMAP'][0])
+    
+    #MCE 2023-07-04 - GRID power needs to reflect time-of-day to be useful for cost analysis
+    gp=catByTimeblock(pwr,3)
+    gpChart=lineChartWithCategories(gp,-1500,10000,gRight,int(hStep))
     img.paste(gpChart, box=(bbox[0],int(bbox[1])))
     draw.text((bbox[0]+int(bbox[2]/2),bbox[1]),"Grid",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=smolFont)
     draw.text((bbox[2],bbox[1]),"10kW",fill=cfg['GREYMAP'][1],anchor="ra",align="right",font=tinyFont)
     draw.text((bbox[2],bbox[3]),"-1.5kW",fill=cfg['GREYMAP'][1],anchor="rd",align="right",font=tinyFont)
     
+    #HOUSE USAGE data doesn't need to worry about time-of-day
+    bbox[1] += hStep
+    bbox[3] += hStep        
+    hp=just_the_data(pwr,2)
+    hpChart=filledChart(hp,0,10000,gRight,int(hStep),cfg['GREYMAP'][0])
+    img.paste(hpChart,box=(bbox[0],int(bbox[1])))
+    draw.text((bbox[0]+int(bbox[2]/2),bbox[1]),"House",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=smolFont)
+    draw.text((bbox[2],bbox[1]),"10kW",fill=cfg['GREYMAP'][1],anchor="ra",align="right",font=tinyFont)
+    
+    #SOLAR generation doesn't need to worry about time-of-day
     bbox[1] += hStep
     bbox[3] += hStep
     sp=just_the_data(pwr,1)
@@ -221,35 +319,45 @@ def gen_image(width,height) :
     draw.text((bbox[0]+int(bbox[2]/2),bbox[1]),"Solar",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=smolFont)
     draw.text((bbox[2],bbox[1]),"3.2kW",fill=cfg['GREYMAP'][1],anchor="ra",align="right",font=tinyFont)
     
+    #BATTERY charge-rate might be useful to categorise by time-of-day
     bbox[1] += hStep
     bbox[3] += hStep
-    bp=just_the_data(pwr,4)
-    bpChart=lineChart(bp,-2000,5000,gRight,int(hStep),cfg['GREYMAP'][0])
+    #bp=just_the_data(pwr,4)
+    #bpChart=lineChart(bp,-2000,5000,gRight,int(hStep),cfg['GREYMAP'][0])
+    bp=catByTimeblock(pwr,4)
+    bpChart=lineChartWithCategories(bp,-2000,5000,gRight,int(hStep))
     img.paste(bpChart,box=(bbox[0],int(bbox[1])))
     draw.text((bbox[0]+int(bbox[2]/2),bbox[1]),"Battery",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=smolFont)
     draw.text((bbox[2],bbox[1]),"5kW",fill=cfg['GREYMAP'][1],anchor="ra",align="right",font=tinyFont)
     draw.text((bbox[2],bbox[3]),"-2kW",fill=cfg['GREYMAP'][1],anchor="rd",align="right",font=tinyFont)
     
+    
+    lp=influx_query("SELECT last(batteryPower),last(gridPower),last(housePower),last(solarPower) FROM instantpower")        
+    
     #Down the right hand side go the summaries of consumption plus the bar-charts of current 
     #production/usage.
     sBox = dBot+5 # our starting point is at the top of the area
-    draw.text((midtBox,sBox),"House kWh",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=smolFont)
-    draw.text((midtBox,sBox+20),f"{houseIn:.1f}",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=medFont )
     #we need to work out how much space is available per bar-chart. We can do this by subtracting 
     #the size of the text we need (25 * 2 * 3 = 120) from the remaining space
     remChartSpace = cfg['IMGHEIGHT'] - sBox - (25 * 2 * 3)
     #Making each chart size...
     cX = cfg['IMGWIDTH'] - gRight
     cY = int(remChartSpace/4) - 5
-    hBar=miniBar(lp[0][3]/1000,"House kW",0,10,cX,cY)
-    img.paste(hBar,box=(gRight,sBox+45))
-    
-    #And repeat for Grid and Solar:
-    sOffset = sBox+45+cY+10
+    #Now do the GRID:
+    sOffset = sBox
     draw.text((midtBox,sOffset),"Grid kWh",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=smolFont)
     draw.text((midtBox,sOffset+20),f"{netGrid:.1f}",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=medFont )
     gBar=miniBar(lp[0][2]/1000,"Grid kW",-1,10,cX,cY)
     img.paste(gBar,box=(gRight,sOffset+45))
+    
+    #Now do the HOUSE:
+    sOffset = sBox+45+cY+10
+    draw.text((midtBox,sOffset),"House kWh",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=smolFont)
+    draw.text((midtBox,sOffset+20),f"{houseIn:.1f}",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=medFont )
+    hBar=miniBar(lp[0][3]/1000,"House kW",0,10,cX,cY)
+    img.paste(hBar,box=(gRight,sOffset+45))
+    
+    #Now do the SOLAR:
     sOffset = sOffset+45+cY+10
     draw.text((midtBox,sOffset),"Solar kWh",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=smolFont)
     draw.text((midtBox,sOffset+20),f"{solarOut:.1f}",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=medFont )
@@ -268,8 +376,6 @@ def gen_today() :
     #This timestamp stuff needs specifying in Epoch
     today=date.today()
     return int(datetime.combine(today, datetime.min.time()).timestamp())
-    #t = datetime.now()
-    #return t.strftime("%Y-%m-%dT00:00:00Z")
 
 #########################################
 #TODO - seeing errors on this when getting a blank result
@@ -288,6 +394,17 @@ def just_the_data(results,ndx) :
         if len(r)>=ndx and r[ndx] is not None :
             d.append(r[ndx])
     return d
+
+#########################################
+def influxts_to_ts(influxts) :
+    notz=influxts.split('+')
+    noDecimal = notz[0].split('.')
+    noDate = noDecimal[0].split('T')
+    return datetime.strptime(noDate[1],"%H:%M:%S")
+
+#########################################
+def cfgblktime_to_ts(cfgblktime):
+    return datetime.strptime(cfgblktime,"%H:%M")
 
 #########################################
 def parse_influxts(influxts) :
@@ -356,6 +473,9 @@ class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
 #########################################################################
 #########################################################################
 if __name__ == "__main__" :
+    #Determine the time-brackets for cheap/peak/standard
+    cheapTime=[cfgblktime_to_ts(cfg['CHEAPSTART']),cfgblktime_to_ts(cfg['CHEAPEND'])]
+    peakTime=[cfgblktime_to_ts(cfg['PEAKSTART']),cfgblktime_to_ts(cfg['PEAKEND'])]
     socketserver.TCPServer.allow_reuse_address = True #needed to allow restart after Ctrl-C
     server = ThreadedTCPServer(("",cfg['SVRPORT']), ThreadedTCPRequestHandler)
     with server :
