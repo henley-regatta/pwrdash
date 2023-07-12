@@ -129,6 +129,7 @@ def lineChartWithCategories(series,minH,maxH,maxX,maxY) :
     #the start point is at the scale height of the first data point
     #and we'll draw a "background" rectangle for CHEAP/PEAK
     lastX=1
+    
     lastY=maxY - (yFract(series[0][0],minH,maxH)*maxY)
     
     # SPECIAL - if minH < 0, draw a line across at zero
@@ -211,18 +212,20 @@ def usageByTimeblockToday(gridData) :
     return usage
 
 ######################################################################### 
-#GIVEN: A set of time-series data, detemine which time-block each value goes into
+#GIVEN: A set of time-series data, determine which time-block each value goes into
 def catByTimeblock(data,ndx) :
     categorised=[]
     for v in data :
-        #ts always index 0 
-        ts = influxts_to_ts(v[0])
-        if ts>=cheapTime[0] and ts <= cheapTime[1] :
-            categorised.append([v[ndx],2])
-        elif ts>=peakTime[0] and ts <= peakTime[1] :
-            categorised.append([v[ndx],1])
-        else :
-            categorised.append([v[ndx],0])
+        #skip any null values (start of bucket, can happen)
+        if v[ndx] is not None:
+            #ts always index 0 
+            ts = influxts_to_ts(v[0])
+            if ts>=cheapTime[0] and ts <= cheapTime[1] :
+                categorised.append([v[ndx],2])
+            elif ts>=peakTime[0] and ts <= peakTime[1] :
+                categorised.append([v[ndx],1])
+            else :
+                categorised.append([v[ndx],0])
     return categorised
 
 
@@ -278,6 +281,7 @@ def gen_image(width,height) :
            (usage["imp"][2] * cfg['CHEAPIMPCOST'] - usage["exp"][2] * cfg['CHEAPEXPCOST'])
            
     pwr=influx_query("SELECT mean(solarPower), mean(housePower), mean(gridPower), mean(batteryPower) FROM instantpower WHERE time >= now() -1d GROUP BY time(10m)")
+    #NB: Guard against no data returned
         
     draw.text((int(bbox[2]/4),bbox[1]+10),f"Cost:",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=smolFont)
     draw.text((int(bbox[2]/4),bbox[1]+35),f"£{cost:.2f}",fill=cfg['GREYMAP'][0],anchor="ma",align="center",font=medFont)
@@ -447,7 +451,7 @@ class ThreadedTCPRequestHandler(socketserver.StreamRequestHandler) :
     def handle(self):
         self.data = self.rfile.readline().strip()
         p = str(self.data).split()
-        print(f"{self.client_address[0]} requested: {p}")
+        print(f"{datetime.now()} {self.client_address[0]} requested: {p}")
         stdhdrs=f"HTTP/1.1 200 OK\r\nServer: dashsvr/0.1\r\nAccept-Ranges: bytes\r\nDate: {datetime.now(TZ)}"
         if len(p)>1 and ("favicon" not in p[1].lower()) : 
             im=gen_image(cfg['IMGWIDTH'],cfg['IMGHEIGHT'])
