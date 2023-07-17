@@ -16,3 +16,8 @@ COPY . .
 EXPOSE 7478
 
 CMD [ "python", "./dashsvr.py"] 
+
+# Helpful for identifying artefacts later
+LABEL "org.opencontainers.image.description"="Powerwall Dashboard Server Image"
+LABEL "org.opencontainers.service"="pwrdashsvr"
+LABEL "org.opencontainers.image.source"="https://github.com/henley-regatta/pwrdash"
