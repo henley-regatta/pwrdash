@@ -480,6 +480,8 @@ if __name__ == "__main__" :
     #Determine the time-brackets for cheap/peak/standard
     cheapTime=[cfgblktime_to_ts(cfg['CHEAPSTART']),cfgblktime_to_ts(cfg['CHEAPEND'])]
     peakTime=[cfgblktime_to_ts(cfg['PEAKSTART']),cfgblktime_to_ts(cfg['PEAKEND'])]
+    #Create an internal variable denoting runtime
+    SERVERSTARTTIME=datetime.now()
     socketserver.TCPServer.allow_reuse_address = True #needed to allow restart after Ctrl-C
     server = ThreadedTCPServer(("",cfg['SVRPORT']), ThreadedTCPRequestHandler)
     with server :
