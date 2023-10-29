@@ -404,7 +404,7 @@ def influxts_to_ts(influxts) :
     notz=influxts.split('+')
     noDecimal = notz[0].split('.')
     noDate = noDecimal[0].split('T')
-    return datetime.strptime(noDate[1],"%H:%M:%S")
+    return datetime.strptime(noDate[1].strip('Z'),"%H:%M:%S")
 
 #########################################
 def cfgblktime_to_ts(cfgblktime):
